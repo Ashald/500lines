@@ -6,6 +6,7 @@ class Request(Component):
 
     # TODO: consider using itertools.count(10**6) instead of iter(xrange(10**6, sys.maxint))
     client_ids = iter(xrange(10**6, sys.maxint))
+    # TODO: Consider moving this property to other configuration properties (currently __init__.py)
     RETRANSMIT_TIME = 0.5
 
     def __init__(self, member, n, callback):
