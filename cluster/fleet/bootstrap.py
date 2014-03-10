@@ -20,9 +20,9 @@ class Bootstrap(Component):
         self.send([next(self._peers_cycle)], 'JOIN', requester=self.address)
         self._bootstrap_timer = self.set_timer(JOIN_RETRANSMIT, self._join)
 
-    def do_WELCOME(self, state, slot_num, decisions, viewid, peers, peer_history):
-        self._bootstrapped_callback(state, slot_num, decisions, viewid, peers, peer_history)
-        self.event('view_change', viewid=viewid, peers=peers, slot=slot_num)
+    def do_WELCOME(self, state, slot_num, decisions, view_id, peers, peer_history):
+        self._bootstrapped_callback(state, slot_num, decisions, view_id, peers, peer_history)
+        self.event('view_change', view_id=view_id, peers=peers, slot=slot_num)
         self.event('peer_history_update', peer_history=peer_history)
 
         if self._bootstrap_timer:
