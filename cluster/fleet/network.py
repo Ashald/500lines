@@ -23,48 +23,50 @@ def tuple_to_addr(addr):
 class Node(object):
 
     def __init__(self, port):
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.bind(('', port))
-        self.address = tuple_to_addr(self.sock.getsockname())
-        self.timers = []
-        self.logger = logging.getLogger('node.%s' % (self.address,))
+        self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self._sock.bind(('', port))
+        self._timers = []
+        self._logger = logging.getLogger('node.%s' % self.address)
+        self._components = []
+        self._running = None
+
+        self.address = tuple_to_addr(self._sock.getsockname())
         self.unique_id = uuid.uuid3(NAMESPACE, self.address).int
-        self.components = []
 
     def run(self):
-        self.logger.debug("node starting")
-        self.running = True
-        while self.running:
-            if self.timers:
-                next_timer = self.timers[0][0]
+        self._logger.debug("node starting")
+        self._running = True
+        while self._running:
+            if self._timers:
+                next_timer = self._timers[0][0]
                 if next_timer < time.time():
-                    when, do, callback = heapq.heappop(self.timers)
+                    when, do, callback = heapq.heappop(self._timers)
                     if do:
                         callback()
                     continue
             else:
                 next_timer = 0
-            timeout = max(0.1, next_timer - time.time())
-            self.sock.settimeout(timeout)
+            timeout = max(0.1, next_timer - self.now())
+            self._sock.settimeout(timeout)
             try:
-                msg, address = self.sock.recvfrom(102400)
+                # TODO: 102400 looks like a magic number => should be moved in some constant
+                msg, address = self._sock.recvfrom(102400)
             except socket.timeout:
+                # TODO: maybe we should at least a little wait that's so process will respond to Ctrl+C
                 continue
             action, kwargs = pickle.loads(msg)
-            self.logger.debug("received %r with args %r" % (action, kwargs))
-            for comp in self.components[:]:
-                try:
-                    fn = getattr(comp, 'do_%s' % action)
-                except AttributeError:
-                    continue
-                fn(**kwargs)
+            self._logger.debug("received %r with args %r", action, kwargs)
+            for comp in self._components[:]:
+                fn = getattr(comp, 'do_%s' % action, None)
+                if callable(fn):
+                    fn(**kwargs)
 
     def kill(self):
-        self.running = False
+        self._running = False
 
     def set_timer(self, seconds, callback):
-        timer = [time.time() + seconds, True, callback]
-        heapq.heappush(self.timers, timer)
+        timer = [self.now() + seconds, True, callback]
+        heapq.heappush(self._timers, timer)
         return timer
 
     def cancel_timer(self, timer):
@@ -74,18 +76,19 @@ class Node(object):
         return time.time()
 
     def send(self, destinations, action, **kwargs):
-        self.logger.debug("sending %s with args %s to %s" %
-                          (action, kwargs, destinations))
+        self._logger.debug("sending %s with args %s to %s", action, kwargs, destinations)
         pkl = pickle.dumps((action, kwargs))
         for dest in destinations:
-            self.sock.sendto(pkl, addr_to_tuple(dest))
+            self._sock.sendto(pkl, addr_to_tuple(dest))
 
     def register(self, component):
-        self.components.append(component)
+        self._components.append(component)
 
     def unregister(self, component):
-        self.components.remove(component)
+        self._components.remove(component)
 
+
+# TODO: Remove code bellow
 
 # tests
 
