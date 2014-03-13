@@ -19,21 +19,21 @@ class ClusterMember(Member):
         # only start the bootstrap component initially, then hand off to the rest
 
         def bootstrapped(state, slot_num, decisions, view_id, peers, peer_history):
-            self.replica = replica_cls(self, execute_fn)
-            self.acceptor = acceptor_cls(self)
-            self.leader = leader_cls(self, node.unique_id, peer_history, commander_cls=commander_cls, scout_cls=scout_cls)
-            self.heartbeat = heartbeat_cls(self, node.now)
+            self._replica = replica_cls(self, execute_fn)
+            self._acceptor = acceptor_cls(self)
+            self._leader = leader_cls(self, node.unique_id, peer_history, commander_cls=commander_cls, scout_cls=scout_cls)
+            self._heartbeat = heartbeat_cls(self, node.now)
             # start up the replica, now that its information is ready
-            self.replica.start(state, slot_num, decisions, view_id, peers, peer_history)
+            self._replica.start(state, slot_num, decisions, view_id, peers, peer_history)
 
-        self.bootstrap = bootstrap_cls(self, peers, bootstrapped)
+        self._bootstrap = bootstrap_cls(self, peers, bootstrapped)
 
     def start(self):
-        self.bootstrap.start()
+        self._bootstrap.start()
 
 
 class ClusterSeed(Member):
 
     def __init__(self, node, initial_state, seed_cls=Seed):
         super(ClusterSeed, self).__init__(node)
-        self.seed = seed_cls(self, initial_state)
+        self._seed = seed_cls(self, initial_state)
