@@ -5,6 +5,8 @@ from statemachine import sequence_generator
 # Remove from final copy:
 #  - logging
 
+# TODO: It seems that this file should be deleted
+
 
 class Member(Node):
 
