@@ -24,14 +24,15 @@ class Replica(Component):
         self._slot_num = slot_num
         # next slot num for a proposal (may lead slot_num)
         self._next_slot = slot_num
-        self._decisions = defaultlist(decisions)
+        self._decisions = decisions
         self._view_id = view_id
         self._peers = peers
         self._peers_down = set()
         self._peer_history = peer_history
         self._welcome_peers = set()
 
-        assert decisions[slot_num] is None
+        # TODO: Can be replaced with 'assert slot_num not in self._decisions' if decision value cannot be None
+        assert decisions.get(slot_num) is None
 
         self._catchup()
 
@@ -72,7 +73,8 @@ class Replica(Component):
             self.send(self._peers, 'CATCHUP', slot=slot, sender=self.address)
             if self._proposals[slot]:
                 # resend a proposal we initiated
-                if not self._decisions[slot]:
+                # TODO: Can be replaced with 'if slot not in self._decisions' if decision value cannot be None
+                if not self._decisions.get(slot):
                     self._propose(self._proposals[slot], slot)
             else:
                 # make an empty proposal in case nothing has been decided
@@ -89,21 +91,23 @@ class Replica(Component):
         self._peers_down = down
         if not self._peers_down:
             return
-        if self._view_change_proposal and self._view_change_proposal not in self._decisions:
+        if self._view_change_proposal and self._view_change_proposal not in self._decisions.viewvalues():
             return  # we're still working on a view change that hasn't been decided
         new_peers = tuple(sorted(set(self._peers) - set(down)))
         if len(new_peers) < 3:
             self.logger.info("lost peer(s) %s; need at least three peers", down)
             return
         self.logger.info("lost peer(s) %s; proposing new view", down)
-        self._view_change_proposal = Proposal(None, None,
-                                              ViewChange(self._view_id + 1, tuple(sorted(set(self._peers) - set(down)))))
+        self._view_change_proposal = Proposal(
+            None, None,
+            ViewChange(self._view_id + 1, tuple(sorted(set(self._peers) - set(down)))))
         self._propose(self._view_change_proposal)
 
     # handling decided proposals
 
     def do_DECISION(self, slot, proposal):
-        if self._decisions[slot] is not None:
+        # TODO: Can be replaced with 'if slot in self._decisions' if decision value cannot be None
+        if self._decisions.get(slot) is not None:
             assert self._decisions[slot] == proposal, "slot %d already decided: %r!" % (slot, self._decisions[slot])
             return
         self._decisions[slot] = proposal
@@ -111,7 +115,7 @@ class Replica(Component):
 
         # execute any pending, decided proposals, eliminating duplicates
         while True:
-            commit_proposal = self._decisions[self._slot_num]
+            commit_proposal = self._decisions.get(self._slot_num)
             if not commit_proposal:
                 break  # not decided yet
             commit_slot, self._slot_num = self._slot_num, self._slot_num + 1
@@ -141,7 +145,8 @@ class Replica(Component):
 
     def _commit_decided_proposal(self, slot, proposal):
         """Actually commit a proposal that is decided and in sequence"""
-        if proposal in self._decisions[:slot]:
+        decided_proposals = [p for s, p in self._decisions.iteritems() if s < slot]
+        if proposal in decided_proposals:
             self.logger.info("not committing duplicate proposal %r at slot %d", proposal, slot)
             return  # duplicate
 
@@ -192,6 +197,7 @@ class Replica(Component):
 
     def do_CATCHUP(self, slot, sender):
         # if we have a decision for this proposal, spread the knowledge
-        if self._decisions[slot]:
+        # TODO: Can be replaced with 'if slot in self._decisions' if decision value cannot be None
+        if self._decisions.get(slot):
             self.send([sender], 'DECISION',
                       slot=slot, proposal=self._decisions[slot])
