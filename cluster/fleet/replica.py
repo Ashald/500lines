@@ -3,191 +3,195 @@ from .member import Component
 
 
 class Replica(Component):
-
     def __init__(self, member, execute_fn):
         super(Replica, self).__init__(member)
-        self.execute_fn = execute_fn
-        self.proposals = defaultlist()
-        self.viewchange_proposal = None
+        self._execute_fn = execute_fn
+        self._proposals = defaultlist()
+        self._view_change_proposal = None
+
+        self._state = None
+        self._slot_num = None
+        self._next_slot = None
+        self._decisions = None
+        self._view_id = None
+        self._peers = None
+        self._peers_down = None
+        self._peer_history = None
+        self._welcome_peers = None
 
     def start(self, state, slot_num, decisions, view_id, peers, peer_history):
-        self.state = state
-        self.slot_num = slot_num
+        self._state = state
+        self._slot_num = slot_num
         # next slot num for a proposal (may lead slot_num)
-        self.next_slot = slot_num
-        self.decisions = defaultlist(decisions)
-        self.view_id = view_id
-        self.peers = peers
-        self.peers_down = set()
-        self.peer_history = peer_history
-        self.welcome_peers = set()
+        self._next_slot = slot_num
+        self._decisions = defaultlist(decisions)
+        self._view_id = view_id
+        self._peers = peers
+        self._peers_down = set()
+        self._peer_history = peer_history
+        self._welcome_peers = set()
 
         assert decisions[slot_num] is None
 
-        self.catchup()
+        self._catchup()
 
     # creating proposals
 
     def do_INVOKE(self, caller, client_id, input_value):
         proposal = Proposal(caller, client_id, input_value)
-        if proposal not in self.proposals:
-            self.propose(proposal)
+        if proposal not in self._proposals:
+            self._propose(proposal)
         else:
-            slot = self.proposals.index(proposal)
-            self.logger.info("proposal %s already proposed in slot %d" %
-                             (proposal, slot))
+            slot = self._proposals.index(proposal)
+            self.logger.info("proposal %s already proposed in slot %d", proposal, slot)
 
     def do_JOIN(self, requester):
-        if requester not in self.peers:
-            viewchange = ViewChange(self.view_id + 1,
-                                    tuple(sorted(set(self.peers) | set([requester]))))
-            self.propose(Proposal(None, None, viewchange))
+        if requester not in self._peers:
+            view_change = ViewChange(self._view_id + 1, tuple(sorted(set(self._peers) | {requester})))
+            self._propose(Proposal(None, None, view_change))
 
     # injecting proposals
 
-    def propose(self, proposal, slot=None):
+    def _propose(self, proposal, slot=None):
         if not slot:
-            slot = self.next_slot
-            self.next_slot += 1
-        self.proposals[slot] = proposal
+            slot = self._next_slot
+            self._next_slot += 1
+        self._proposals[slot] = proposal
         # find a leader we think is working, deterministically
-        leaders = [view_primary(self.view_id, self.peers)] + \
-            list(self.peers)
-        leader = (l for l in leaders if l not in self.peers_down).next()
-        self.logger.info("proposing %s at slot %d to leader %s" %
-                         (proposal, slot, leader))
+        leaders = [view_primary(self._view_id, self._peers)] + list(self._peers)
+        leader = next(l for l in leaders if l not in self._peers_down)
+        self.logger.info("proposing %s at slot %d to leader %s", proposal, slot, leader)
         self.send([leader], 'PROPOSE', slot=slot, proposal=proposal)
 
-    def catchup(self):
+    def _catchup(self):
         """Try to catch up on un-decided slots"""
-        if self.slot_num != self.next_slot:
-            self.logger.debug("catching up on %d .. %d" % (self.slot_num, self.next_slot-1))
-        for slot in xrange(self.slot_num, self.next_slot):
+        if self._slot_num != self._next_slot:
+            self.logger.debug("catching up on %d .. %d" % (self._slot_num, self._next_slot - 1))
+        for slot in xrange(self._slot_num, self._next_slot):
             # ask peers for information regardless
-            self.send(self.peers, 'CATCHUP', slot=slot, sender=self.address)
-            if self.proposals[slot]:
+            self.send(self._peers, 'CATCHUP', slot=slot, sender=self.address)
+            if self._proposals[slot]:
                 # resend a proposal we initiated
-                if not self.decisions[slot]:
-                    self.propose(self.proposals[slot], slot)
+                if not self._decisions[slot]:
+                    self._propose(self._proposals[slot], slot)
             else:
                 # make an empty proposal in case nothing has been decided
-                self.propose(Proposal(None, None, None), slot)
-        self.set_timer(CATCHUP_INTERVAL, self.catchup)
+                self._propose(Proposal(None, None, None), slot)
+        self.set_timer(CATCHUP_INTERVAL, self._catchup)
 
     # view changes
 
     def on_view_change_event(self, slot, view_id, peers):
-        self.peers = peers
-        self.peers_down = set()
+        self._peers = peers
+        self._peers_down = set()
 
     def on_peers_down_event(self, down):
-        self.peers_down = down
-        if not self.peers_down:
+        self._peers_down = down
+        if not self._peers_down:
             return
-        if self.viewchange_proposal and self.viewchange_proposal not in self.decisions:
-            return  # we're still working on a viewchange that hasn't been decided
-        new_peers = tuple(sorted(set(self.peers) - set(down)))
+        if self._view_change_proposal and self._view_change_proposal not in self._decisions:
+            return  # we're still working on a view change that hasn't been decided
+        new_peers = tuple(sorted(set(self._peers) - set(down)))
         if len(new_peers) < 3:
-            self.logger.info("lost peer(s) %s; need at least three peers" % (down,))
+            self.logger.info("lost peer(s) %s; need at least three peers", down)
             return
-        self.logger.info("lost peer(s) %s; proposing new view" % (down,))
-        self.viewchange_proposal = Proposal(
-                None, None,
-                ViewChange(self.view_id + 1, tuple(sorted(set(self.peers) - set(down)))))
-        self.propose(self.viewchange_proposal)
+        self.logger.info("lost peer(s) %s; proposing new view", down)
+        self._view_change_proposal = Proposal(None, None,
+                                              ViewChange(self._view_id + 1, tuple(sorted(set(self._peers) - set(down)))))
+        self._propose(self._view_change_proposal)
 
     # handling decided proposals
 
     def do_DECISION(self, slot, proposal):
-        if self.decisions[slot] is not None:
-            assert self.decisions[slot] == proposal, \
-                "slot %d already decided: %r!" % (
-                    slot, self.decisions[slot])
+        if self._decisions[slot] is not None:
+            assert self._decisions[slot] == proposal, "slot %d already decided: %r!" % (slot, self._decisions[slot])
             return
-        self.decisions[slot] = proposal
-        self.next_slot = max(self.next_slot, slot + 1)
+        self._decisions[slot] = proposal
+        self._next_slot = max(self._next_slot, slot + 1)
 
         # execute any pending, decided proposals, eliminating duplicates
         while True:
-            commit_proposal = self.decisions[self.slot_num]
+            commit_proposal = self._decisions[self._slot_num]
             if not commit_proposal:
                 break  # not decided yet
-            commit_slot, self.slot_num = self.slot_num, self.slot_num + 1
+            commit_slot, self._slot_num = self._slot_num, self._slot_num + 1
 
             # update the view history *before* committing, so the WELCOME message contains
             # an appropriate history
-            self.peer_history[commit_slot] = self.peers
-            if commit_slot - ALPHA in self.peer_history:
-                del self.peer_history[commit_slot - ALPHA]
+            self._peer_history[commit_slot] = self._peers
+            if commit_slot - ALPHA in self._peer_history:
+                del self._peer_history[commit_slot - ALPHA]
             exp_peer_history = list(range(commit_slot - ALPHA + 1, commit_slot + 1))
-            assert list(sorted(self.peer_history)) == exp_peer_history, \
-                    "bad peer history %s, exp %s" % (self.peer_history, exp_peer_history)
-            self.event('update_peer_history', peer_history=self.peer_history)
 
-            self.commit(commit_slot, commit_proposal)
+            assert list(sorted(self._peer_history)) == exp_peer_history, "bad peer history %s, exp %s" % (
+                self._peer_history, exp_peer_history)
+
+            self.event('update_peer_history', peer_history=self._peer_history)
+
+            self._commit_decided_proposal(commit_slot, commit_proposal)
 
             # re-propose any of our proposals which have lost in their slot
-            our_proposal = self.proposals[commit_slot]
+            our_proposal = self._proposals[commit_slot]
             if our_proposal is not None and our_proposal != commit_proposal:
                 # TODO: filter out unnecessary proposals - no-ops and outdated
-                # view changes (proposal.input.view_id <= self.view_id)
-                self.propose(our_proposal)
+                # view changes (proposal.input.view_id <= self._view_id)
+                self._propose(our_proposal)
+
     on_decision_event = do_DECISION
 
-    def commit(self, slot, proposal):
+    def _commit_decided_proposal(self, slot, proposal):
         """Actually commit a proposal that is decided and in sequence"""
-        if proposal in self.decisions[:slot]:
-            self.logger.info("not committing duplicate proposal %r at slot %d" % (proposal, slot))
+        if proposal in self._decisions[:slot]:
+            self.logger.info("not committing duplicate proposal %r at slot %d", proposal, slot)
             return  # duplicate
 
-        self.logger.info("committing %r at slot %d" % (proposal, slot))
+        self.logger.info("committing %r at slot %d", proposal, slot)
         self.event('commit', slot=slot, proposal=proposal)
 
         if isinstance(proposal.input, ViewChange):
-            self.commit_viewchange(slot, proposal.input)
+            self._commit_view_change(slot, proposal.input)
         elif proposal.caller is not None:
             # perform a client operation
-            self.state, output = self.execute_fn(self.state, proposal.input)
+            self._state, output = self._execute_fn(self._state, proposal.input)
             self.send([proposal.caller], 'INVOKED',
                       client_id=proposal.client_id, output=output)
 
-    def send_welcome(self):
-        if self.welcome_peers:
-            self.send(list(self.welcome_peers), 'WELCOME',
-                      state=self.state,
-                      slot_num=self.slot_num,
-                      decisions=self.decisions,
-                      view_id=self.view_id,
-                      peers=self.peers,
-                      peer_history=self.peer_history)
-            self.welcome_peers = set()
+    def _send_welcome(self):
+        if self._welcome_peers:
+            self.send(list(self._welcome_peers), 'WELCOME',
+                      state=self._state,
+                      slot_num=self._slot_num,
+                      decisions=self._decisions,
+                      view_id=self._view_id,
+                      peers=self._peers,
+                      peer_history=self._peer_history)
+            self._welcome_peers = set()
 
-    def commit_viewchange(self, slot, viewchange):
-        if viewchange.view_id == self.view_id + 1:
-            self.logger.info("entering view %d with peers %s" % (viewchange.view_id, viewchange.peers))
-            self.view_id = viewchange.view_id
+    def _commit_view_change(self, slot, view_change):
+        if view_change.view_id == self._view_id + 1:
+            self.logger.info("entering view %d with peers %s", view_change.view_id, view_change.peers)
+            self._view_id = view_change.view_id
 
             # now make sure that next_slot is at least slot + ALPHA, so that we don't
             # try to make any new proposals depending on the old view.  The catchup()
             # method will take care of proposing these later.
-            self.next_slot = max(slot + ALPHA, self.next_slot)
+            self._next_slot = max(slot + ALPHA, self._next_slot)
 
             # WELCOMEs need to be based on a quiescent state of the replica,
             # not in the middle of a decision-commiting loop, so defer this
             # until the next timer interval.
-            self.welcome_peers |= set(viewchange.peers) - set(self.peers)
-            self.set_timer(0, self.send_welcome)
+            self._welcome_peers |= set(view_change.peers) - set(self._peers)
+            self.set_timer(0, self._send_welcome)
 
-            if self.address not in viewchange.peers:
+            if self.address not in view_change.peers:
                 self.stop()
                 return
-            self.event('view_change', slot=slot, view_id=viewchange.view_id, peers=viewchange.peers)
+            self.event('view_change', slot=slot, view_id=view_change.view_id, peers=view_change.peers)
         else:
-            self.logger.info(
-                "ignored out-of-sequence view change operation")
+            self.logger.info("ignored out-of-sequence view change operation")
 
     def do_CATCHUP(self, slot, sender):
         # if we have a decision for this proposal, spread the knowledge
-        if self.decisions[slot]:
+        if self._decisions[slot]:
             self.send([sender], 'DECISION',
-                      slot=slot, proposal=self.decisions[slot])
+                      slot=slot, proposal=self._decisions[slot])
