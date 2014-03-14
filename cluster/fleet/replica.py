@@ -1,4 +1,4 @@
-from . import Proposal, ViewChange, CATCHUP_INTERVAL, ALPHA, defaultlist, view_primary
+from . import Proposal, ViewChange, CATCHUP_INTERVAL, ALPHA, view_primary
 from .member import Component
 
 
@@ -6,7 +6,7 @@ class Replica(Component):
     def __init__(self, member, execute_fn):
         super(Replica, self).__init__(member)
         self._execute_fn = execute_fn
-        self._proposals = defaultlist()
+        self._proposals = dict()
         self._view_change_proposal = None
 
         self._state = None
@@ -40,10 +40,11 @@ class Replica(Component):
 
     def do_INVOKE(self, caller, client_id, input_value):
         proposal = Proposal(caller, client_id, input_value)
-        if proposal not in self._proposals:
+        if proposal not in self._proposals.viewvalues():
             self._propose(proposal)
         else:
-            slot = self._proposals.index(proposal)
+            # It's the only drawback of using dict instead of defaultlist
+            slot = next(s for s, p in self._proposals.iteritems() if p == proposal)
             self.logger.info("proposal %s already proposed in slot %d", proposal, slot)
 
     def do_JOIN(self, requester):
@@ -71,11 +72,11 @@ class Replica(Component):
         for slot in xrange(self._slot_num, self._next_slot):
             # ask peers for information regardless
             self.send(self._peers, 'CATCHUP', slot=slot, sender=self.address)
-            if self._proposals[slot]:
+            # TODO: Can be replaced with 'if slot in self._proposals and slot not in self._decisions'
+            # TODO: if proposal value cannot be None
+            if self._proposals.get(slot) and not self._decisions.get(slot):
                 # resend a proposal we initiated
-                # TODO: Can be replaced with 'if slot not in self._decisions' if decision value cannot be None
-                if not self._decisions.get(slot):
-                    self._propose(self._proposals[slot], slot)
+                self._propose(self._proposals[slot], slot)
             else:
                 # make an empty proposal in case nothing has been decided
                 self._propose(Proposal(None, None, None), slot)
@@ -135,7 +136,7 @@ class Replica(Component):
             self._commit_decided_proposal(commit_slot, commit_proposal)
 
             # re-propose any of our proposals which have lost in their slot
-            our_proposal = self._proposals[commit_slot]
+            our_proposal = self._proposals.get(commit_slot)
             if our_proposal is not None and our_proposal != commit_proposal:
                 # TODO: filter out unnecessary proposals - no-ops and outdated
                 # view changes (proposal.input.view_id <= self._view_id)
