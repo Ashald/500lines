@@ -13,14 +13,14 @@ class Listener(member.Component):
         self._event_queue = event_queue
 
     def on_view_change_event(self, slot, view_id, peers):
-        self._event_queue.put(("membership_change", peers))
+        self.event_queue.put(("membership_change", peers))
 
 
 class Ship(object):
 
     def __init__(self, state_machine, port=10001, peers=None, seed=None):
         peers = peers or ['255.255.255.255-%d' % port]
-        self._node = network.Node(port)
+        self.node = network.Node(port)
         if seed is not None:
             self._cluster_member = member_replicated.ClusterSeed(self._node, seed)
         else:
@@ -33,25 +33,25 @@ class Ship(object):
 
     def start(self):
         def run():
-            self._cluster_member.start()
-            self._node.run()
+            self.cluster_member.start()
+            self.node.run()
 
-        self._thread = threading.Thread(target=run)
-        self._thread.setDaemon(True)
-        self._thread.start()
+        self.thread = threading.Thread(target=run)
+        self.thread.setDaemon(1)
+        self.thread.start()
 
     def invoke(self, input_value):
-        assert self._current_request is None
+        assert self.current_request is None
         q = Queue.Queue()
 
         def done(output):
             self._current_request = None
             q.put(output)
-
-        self._current_request = client.Request(self._cluster_member, input_value, done)
-        self._current_request.start()
+        self.current_request = client.Request(self.cluster_member, input_value, done)
+        self.current_request.start()
         return q.get()
 
     def events(self):
         while True:
-            yield self._event_queue.get()
+            evt = self.event_queue.get()
+            yield evt

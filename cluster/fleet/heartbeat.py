@@ -6,18 +6,18 @@ class Heartbeat(Component):
 
     def __init__(self, member, clock):
         super(Heartbeat, self).__init__(member)
-        self._running = False
-        self._last_heard_from = {}
-        self._peers = None
-        self._clock = clock
+        self.running = False
+        self.last_heard_from = {}
+        self.peers = None
+        self.clock = clock
 
     def on_view_change_event(self, slot, view_id, peers):
-        self._peers = set(peers)
-        self._last_heard_from.update({peer: self._clock() for peer in self._peers})
-
-        if not self._running:
-            self._heartbeat()
-            self._running = True
+        self.peers = set(peers)
+        for peer in self.peers:
+            self.last_heard_from[peer] = self.clock()
+        if not self.running:
+            self.heartbeat()
+            self.running = True
 
     def do_HEARTBEAT(self, sender):
         self._last_heard_from[sender] = self._clock()

@@ -32,11 +32,11 @@ class Seed(Component):
                   slot_num=ALPHA,
                   decisions={},
                   view_id=0,
-                  peers=list(self._peers),
+                  peers=list(self.peers),
                   peer_history=peer_history.copy())
 
         # stick around for long enough that we don't hear any new JOINs from
         # the newly formed cluster
-        if self._exit_timer:
-            self.cancel_timer(self._exit_timer)
-        self._exit_timer = self.set_timer(JOIN_RETRANSMIT * 2, self.stop)
+        if self.exit_timer:
+            self.cancel_timer(self.exit_timer)
+        self.exit_timer = self.set_timer(JOIN_RETRANSMIT * 2, self.stop)

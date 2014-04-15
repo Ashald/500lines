@@ -17,17 +17,17 @@ class Commander(Component):
         self._commander_timer = None
 
     def start(self):
-        self.send(set(self._peers) - self._accepted, 'ACCEPT',  # p2a
-                  commander_id=self._commander_id,
-                  ballot_num=self._ballot_num,
-                  slot=self._slot,
-                  proposal=self._proposal)
-        self._commander_timer = self.set_timer(ACCEPT_RETRANSMIT, self.start)
+        self.send(set(self.peers) - self.accepted, 'ACCEPT',  # p2a
+                  commander_id=self.commander_id,
+                  ballot_num=self.ballot_num,
+                  slot=self.slot,
+                  proposal=self.proposal)
+        self.timer = self.set_timer(ACCEPT_RETRANSMIT, self.start)
 
-    def _finished(self, ballot_num, preempted):
-        self._leader.commander_finished(self._commander_id, ballot_num, preempted)
-        if self._commander_timer:
-            self.cancel_timer(self._commander_timer)
+    def finished(self, ballot_num, preempted):
+        self.leader.commander_finished(self.commander_id, ballot_num, preempted)
+        if self.timer:
+            self.cancel_timer(self.timer)
         self.stop()
 
     def do_ACCEPTED(self, commander_id, acceptor, ballot_num):  # p2b

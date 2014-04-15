@@ -19,11 +19,11 @@ class Scout(Component):
         self.logger.info("scout starting")
         self._send_prepare()
 
-    def _send_prepare(self):
-        self.send(self._peers, 'PREPARE',  # p1a
-                  scout_id=self._scout_id,
-                  ballot_num=self._ballot_num)
-        self._retransmit_timer = self.set_timer(PREPARE_RETRANSMIT, self._send_prepare)
+    def send_prepare(self):
+        self.send(self.peers, 'PREPARE',  # p1a
+                  scout_id=self.scout_id,
+                  ballot_num=self.ballot_num)
+        self.retransmit_timer = self.set_timer(PREPARE_RETRANSMIT, self.send_prepare)
 
     def finished(self, adopted, ballot_num):
         self.cancel_timer(self._retransmit_timer)
@@ -36,11 +36,11 @@ class Scout(Component):
     def do_PROMISE(self, scout_id, acceptor, ballot_num, accepted):  # p1b
         if scout_id != self._scout_id:
             return
-        if ballot_num == self._ballot_num:
-            self.logger.info("got matching promise; need %d", self._quorum)
-            self._pvals.update(accepted)
-            self._accepted.add(acceptor)
-            if len(self._accepted) >= self._quorum:
+        if ballot_num == self.ballot_num:
+            self.logger.info("got matching promise; need %d" % self.quorum)
+            self.pvals.update(accepted)
+            self.accepted.add(acceptor)
+            if len(self.accepted) >= self.quorum:
                 # We're adopted; note that this does *not* mean that no other leader is active.
                 # Any such conflicts will be handled by the commanders.
                 self.finished(True, ballot_num)

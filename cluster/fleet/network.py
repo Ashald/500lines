@@ -40,7 +40,7 @@ class Node(object):
             if self._timers:
                 next_timer = self._timers[0][0]
                 if next_timer < time.time():
-                    when, do, callback = heapq.heappop(self._timers)
+                    when, do, callback = heapq.heappop(self.timers)
                     if do:
                         callback()
                     continue
@@ -65,8 +65,8 @@ class Node(object):
         self._running = False
 
     def set_timer(self, seconds, callback):
-        timer = [self.now() + seconds, True, callback]
-        heapq.heappush(self._timers, timer)
+        timer = [time.time() + seconds, True, callback]
+        heapq.heappush(self.timers, timer)
         return timer
 
     def cancel_timer(self, timer):

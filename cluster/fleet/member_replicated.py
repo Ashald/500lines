@@ -19,14 +19,14 @@ class ClusterMember(Member):
         # only start the bootstrap component initially, then hand off to the rest
 
         def bootstrapped(state, slot_num, decisions, view_id, peers, peer_history):
-            self._replica = replica_cls(self, execute_fn)
-            self._acceptor = acceptor_cls(self)
-            self._leader = leader_cls(self, node.unique_id, peer_history, commander_cls=commander_cls, scout_cls=scout_cls)
-            self._heartbeat = heartbeat_cls(self, node.now)
+            self.replica = replica_cls(self, execute_fn)
+            self.acceptor = acceptor_cls(self)
+            self.leader = leader_cls(self, node.unique_id, peer_history, commander_cls=commander_cls, scout_cls=scout_cls)
+            self.heartbeat = heartbeat_cls(self, node.now)
             # start up the replica, now that its information is ready
-            self._replica.start(state, slot_num, decisions, view_id, peers, peer_history)
+            self.replica.start(state, slot_num, decisions, view_id, peers, peer_history)
 
-        self._bootstrap = bootstrap_cls(self, peers, bootstrapped)
+        self.bootstrap = bootstrap_cls(self, peers, bootstrapped)
 
     def start(self):
         self._bootstrap.start()

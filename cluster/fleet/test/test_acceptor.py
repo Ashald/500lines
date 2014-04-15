@@ -15,8 +15,8 @@ class Tests(utils.ComponentTestCase):
 
     def test_prepare_new_ballot(self):
         proposal = Proposal('cli', 123, 'INC')
-        self.ac._accepted = {(Ballot(7, 19, 19), 33): proposal}
-        self.ac._ballot_num = Ballot(7, 10, 10)
+        self.ac.accepted = {(Ballot(7, 19, 19), 33): proposal}
+        self.ac.ballot_num = Ballot(7, 10, 10)
         self.node.fake_message('PREPARE',
                                scout_id=ScoutId(address='SC', ballot_num=Ballot(7, 19, 19)),
                                # newer than the acceptor's ballot_num
@@ -47,7 +47,7 @@ class Tests(utils.ComponentTestCase):
     def test_accept_new_ballot(self):
         proposal = Proposal('cli', 123, 'INC')
         cmd_id = CommanderId(address='CMD', slot=33, proposal=proposal)
-        self.ac._ballot_num = Ballot(7, 10, 10)
+        self.ac.ballot_num = Ballot(7, 10, 10)
         self.node.fake_message('ACCEPT',
                                commander_id=cmd_id,
                                ballot_num=Ballot(7, 19, 19),
@@ -64,7 +64,7 @@ class Tests(utils.ComponentTestCase):
     def test_accept_old_ballot(self):
         proposal = Proposal('cli', 123, 'INC')
         cmd_id = CommanderId(address='CMD', slot=33, proposal=proposal)
-        self.ac._ballot_num = Ballot(7, 10, 10)
+        self.ac.ballot_num = Ballot(7, 10, 10)
         self.node.fake_message('ACCEPT',
                                commander_id=cmd_id,
                                ballot_num=Ballot(7, 5, 5),
